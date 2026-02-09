@@ -1,5 +1,5 @@
 # PP-GenomeDL
-Privacy-Preserving Genome Deep Learning
+
 **Toward Secure Genomic Intelligence: Privacy-Preserving Deep Learning Frameworks for Cancer Classification and Collaborative Analysis**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
