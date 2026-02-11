@@ -29,63 +29,6 @@ This repository provides implementations of privacy-preserving deep learning mod
 
 ---
 
-## Repository Structure
-
-```
-PP-GenomeDL/
-├── data/                           # Data directory
-│   ├── raw/                        # Raw TCGA data files (.npy)
-│   └── processed/                  # Preprocessed and normalized data
-├── models/                         # Deep learning model architectures
-│   ├── naive_model.py              # Fully connected neural network (4-layer)
-│   ├── transformer_model.py        # Transformer model based on T-GEM
-│   ├── cnn_qat_model.py            # QAT CNN for FHE compatibility
-│   └── DL_modules/                 # User-defined model directory (for platform)
-├── privacy/                        # Privacy-preserving implementations
-│   ├── differential_privacy/
-│   │   ├── gaussian.py             # Gaussian mechanism
-│   │   ├── analytic_gaussian.py    # Analytic Gaussian mechanism
-│   │   ├── correlated_gaussian.py  # Correlated Gaussian mechanism
-│   │   └── laplace.py              # Laplace mechanism
-│   ├── federated_learning/
-│   │   ├── fl_server.py            # FL aggregation server
-│   │   ├── fl_client.py            # FL client with local training
-│   │   └── fl_coordinator.py       # FL orchestration and communication
-│   ├── fhe/
-│   │   ├── fhe_compile.py          # Concrete-ML FHE compilation
-│   │   ├── fhe_inference.py        # Encrypted inference pipeline
-│   │   └── fhe_dp_integration.py   # FHE + DP combined model
-│   └── fl_mp_ckks_fhe/
-│       ├── framework.py            # Core FL-MP-CKKS-FHE framework
-│       ├── mp_ckks.py              # Multi-party CKKS encryption (OpenFHE)
-│       ├── adaptive_scaling.py     # Adaptive per-chunk scaling strategy
-│       ├── simd_optimization.py    # SIMD ciphertext packing
-│       ├── gradient_compression.py # Top-K gradient sparsification
-│       └── utils.py                # Gradient clipping, normalization utilities
-├── attacks/                        # Privacy attack testing
-│   ├── model_inversion_attack.py   # MIA implementation
-│   ├── mia_visualization.py        # Z-score distribution visualization
-│   └── mia_metrics.py              # MSE, NRMSE, PSNR, SSIM evaluation
-├── platform/                       # Privacy-preserving deep learning platform
-│   ├── run_platform.py             # Main entry point
-│   ├── config.ini                  # Configuration file template
-│   └── README.md                   # Platform-specific documentation
-├── experiments/                    # Experiment scripts
-│   ├── exp1_dp_fl_naive.py         # DP + FL on naïve model
-│   ├── exp2_dp_fl_transformer.py   # DP + FL on transformer model
-│   ├── exp3_fhe_cnn.py             # FHE-compatible CNN
-│   ├── exp4_fhe_dp_cnn.py          # FHE + DP CNN with MIA testing
-│   ├── exp5_fl_mp_ckks_fhe.py      # FL-MP-CKKS-FHE framework
-│   ├── exp6_adaptive_scaling.py    # Adaptive scaling evaluation
-│   ├── exp7_simd.py                # SIMD optimization evaluation
-│   └── exp8_gradient_compression.py# Top-K compression evaluation
-├── results/                        # Output directory for results and logs
-├── requirements.txt                # Python dependencies
-├── setup.py                        # Package installation
-└── README.md                       # This file
-```
-
----
 
 ## Installation
 
@@ -102,14 +45,6 @@ PP-GenomeDL/
 git clone https://github.com/<username>/PP-GenomeDL.git
 cd PP-GenomeDL
 
-# Create a virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate   # Windows
-
-# Install dependencies
-pip install -r requirements.txt
-```
 
 ### Dependencies
 
@@ -131,34 +66,13 @@ pip install -r requirements.txt
 
 ### TCGA Pan-Cancer Data
 
-The dataset used in this study consists of RNA-seq gene expression profiles from The Cancer Genome Atlas (TCGA), downloaded via the GDC Data Portal using TCGA-assembler2.
-
-```bash
-# Download and preprocess TCGA data
-python data/download_tcga.py
-
-# After preprocessing:
-# - 13,057 samples, 20,531 gene expression features
-# - 37 cancer types
-# - Log10-scaled and normalized
-# - 80/20 train/test split (default)
-```
-
-The processed data should be stored in NumPy format (`.npy`) with the following structure:
-
-```python
-{
-    'sample1_name': {
-        'type': 'BRCA',
-        'features': array([0., 0.464, 0.498, ..., 0.742, 0.631, 0.381])
-    },
-    'sample2_name': {
-        'type': 'STES',
-        'features': array([0.424, 0.519, 0.522, ..., 0.688, 0.570, 0.])
-    },
-    ...
-}
-```
+The dataset used in this study consists of RNA-seq gene expression profiles from The Cancer Genome Atlas (TCGA).             
+The data can be downloaded from Zenodo (https://doi.org/10.5281/zenodo.18603490)                
+These data include:        
+# - 13,057 samples, 20,531 gene expression features               
+# - 37 cancer types                   
+# - Log10-scaled and normalized                   
+# - 80/20 train/test split (default)                       
 
 ---
 
@@ -252,21 +166,6 @@ python platform/run_platform.py --config platform/config.ini
 
 ---
 
-## Key Results
-
-| Model / Framework | Accuracy | Privacy Features | Notable Metric |
-|-------------------|----------|------------------|----------------|
-| Naïve DL (baseline) | 75% | None | — |
-| Naïve DL + DP + FL | 72–75% | DP (ε=100) + FL (5 clients) | Resists MIA |
-| Transformer + DP + FL | 72% | DP (ε=100) + FL (5 clients) | Resists MIA |
-| FHE-CNN (29 cancers) | 96.14% | FHE encrypted inference | ~1,456 s/sample |
-| FHE-CNN + DP | >90% | FHE + DP (ε=10–800) | Enhanced MIA resistance |
-| FL-MP-CKKS-FHE | 70% (test) | MP-FHE + FL (3 clients) | First of its kind |
-| + Adaptive Scaling | 72.66% | MP-FHE + FL | 42.2% faster |
-| + SIMD Optimization | 74.89% | MP-FHE + FL | 72.2% faster (3.6× speedup) |
-| + Top-K 10% Compression | 69.53% | MP-FHE + FL | 84.8% faster |
-
----
 
 ## Citation
 
@@ -276,7 +175,7 @@ If you use this code in your research, please cite:
 @phdthesis{dong2026ppgenomedl,
     title     = {Toward Secure Genomic Intelligence: Privacy-Preserving Deep Learning
                  Frameworks for Cancer Classification and Collaborative Analysis},
-    author    = {Dong, Yucheng},
+    author    = {Dong, Yibo},
     year      = {2026},
     school    = {Mississippi State University},
     department = {Department of Computer Science}
