@@ -30,23 +30,14 @@ This repository provides implementations of privacy-preserving deep learning mod
 ---
 
 
-## Installation
-
-### Prerequisites
+## Prerequisites
 
 - Python 3.8+
 - CUDA-compatible GPU (recommended)
-- OpenFHE library (for FL-MP-CKKS-FHE framework)
+- OpenFHE library (for FL-MP-CKKS-FHE framework)    
 
-### Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/<username>/PP-GenomeDL.git
-cd PP-GenomeDL
-
-
-### Dependencies
+---
+## Dependencies
 
 | Package | Version | Purpose |
 |---------|---------|---------|
@@ -69,10 +60,10 @@ cd PP-GenomeDL
 The dataset used in this study consists of RNA-seq gene expression profiles from The Cancer Genome Atlas (TCGA).             
 The data can be downloaded from Zenodo (https://doi.org/10.5281/zenodo.18603490)                
 These data include:        
-# - 13,057 samples, 20,531 gene expression features               
-# - 37 cancer types                   
-# - Log10-scaled and normalized                   
-# - 80/20 train/test split (default)                       
+ - 13,057 samples, 20,531 gene expression features               
+ - 37 cancer types                   
+ - Log10-scaled and normalized                   
+ - 80/20 train/test split (default)                       
 
 ---
 
