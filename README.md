@@ -36,8 +36,7 @@ This repository provides implementations of privacy-preserving deep learning mod
 - CUDA-compatible GPU (recommended)
 - OpenFHE library (for FL-MP-CKKS-FHE framework)    
 
----
-## Dependencies
+### Dependencies
 
 | Package | Version | Purpose |
 |---------|---------|---------|
@@ -68,92 +67,11 @@ These data include:
 ---
 
 ## Usage
-
-### 1. Cancer Type Classification with DP and FL
-
-```python
-# Naïve deep learning model with differential privacy
-python experiments/exp1_dp_fl_naive.py \
-    --noise_algorithm laplace \
-    --epsilon 100 \
-    --fl_clients 5 \
-    --epochs 200
-
-# Transformer model with DP and FL
-python experiments/exp2_dp_fl_transformer.py \
-    --epsilon 100 \
-    --fl_clients 5
-```
-
-**Configurable parameters:**
-- `--noise_algorithm`: `gaussian`, `analytic_gaussian`, `correlated_gaussian`, `laplace`
-- `--epsilon`: Privacy budget (1, 10, 50, 100, 150, 200, 300, 400)
-- `--fl_clients`: Number of federated learning clients (5, 10, 20, 40)
-- `--epochs`: Training epochs (200 or 400 recommended)
-
-### 2. FHE-Compatible CNN for Encrypted Inference
-
-```python
-# Train QAT CNN and compile to FHE
-python experiments/exp3_fhe_cnn.py \
-    --cancer_types 29 \
-    --batch_size 80 \
-    --dropout 0.4 \
-    --kernel_size 50
-
-# FHE-CNN with differential privacy
-python experiments/exp4_fhe_dp_cnn.py \
-    --epsilon 10 \
-    --epochs 40
-```
-
-### 3. FL-MP-CKKS-FHE Framework
-
-```python
-# Run the multi-party FHE federated learning framework
-python experiments/exp5_fl_mp_ckks_fhe.py \
-    --clients 3 \
-    --epochs 10 \
-    --ring_dimension 65536 \
-    --scale_factor 10 \
-    --clip_value 10 \
-    --learning_rate 0.0001
-```
-
-### 4. Algorithm Optimizations
-
-```python
-# Adaptive per-chunk scaling
-python experiments/exp6_adaptive_scaling.py \
-    --scale_range 50 200
-
-# SIMD optimization
-python experiments/exp7_simd.py
-
-# Top-K gradient compression
-python experiments/exp8_gradient_compression.py \
-    --topk_ratio 0.10  # Options: 0.50, 0.10, 0.05, 0.01
-```
-
-### 5. Model Inversion Attack Testing
-
-```python
-# Run MIA on a trained model
-python attacks/model_inversion_attack.py \
-    --model_path results/model.pth \
-    --cancer_types COADREAD KICH UVM \
-    --metrics mse nrmse psnr ssim
-```
-
-### 6. Privacy-Preserving Platform
-
+All scripts are configured to run in a SLURM environment by default. 
 ```bash
-# 1. Place your PyTorch model in platform/DL_modules/ (class name must be "Model")
-# 2. Store training/test data in platform/data/ (.npy format)
-# 3. Configure platform/config.ini
-# 4. Run:
-python platform/run_platform.py --config platform/config.ini
+sbatch sbatch.sh
 ```
+If your server does not have SLURM installed, you can execute the commands in the batch file one by one.    
 
 ---
 
