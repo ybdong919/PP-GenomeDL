@@ -28,7 +28,48 @@ This repository provides implementations of privacy-preserving deep learning mod
 - **Privacy-Preserving Platform:** A configurable platform for applying privacy-preserving features to user-defined deep learning models
 
 ---
+## Directory Structure
 
+```
+PP-GenomeDL/
+├── Codes_for_5.1_section/        # Chapter 5.1: Privacy preserving of deep learning model for cancer type prediction
+│   └── ...                       
+│                                 
+│
+├── Codes_for_5.2_section/        # Chapter 5.2: FHE-compatible CNN for cancer type prediction
+│   └── ...                       
+│                                 
+│
+├── Codes_for_5.3_section/        # Chapter 5.3: Deep learning model with FHE and DP 
+│   └── ...                       
+│                                 
+│
+├── Codes_for_5.4_section/        # Chapter 5.4: Federal learning and multi-party FHE for training a deep learning model
+│   └── ...                       
+│                                 
+│
+├── Codes_for_5.5_section/        # Chapter 5.5: Algorithm improvements to CKKS-FHE-based federated learning
+│   └── ...                       
+│                                 
+│
+├── Codes_for_5.6_section/        # Chapter 5.6: Privacy-preserving framework for deep learning model
+│   └── ...                      
+│                                
+│                                 
+│
+├── Data_prepare/                 # Data preprocessing scripts
+│   └── ...                       
+│                                 
+│
+├── data/                         # Processed datasets
+│   └── ...                       # Preprocessed TCGA pan-cancer gene expression data
+│                                 # (13,057 samples × 20,531 features, 37 cancer types)
+│
+├── LICENSE                       # MIT License
+└── README.md                     # Project documentation
+```
+
+---
 
 ## Prerequisites
 
