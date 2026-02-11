@@ -1,0 +1,759 @@
+# -*- coding: utf-8 -*-
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import os
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+import numpy as np
+from scipy import stats
+from tqdm import tqdm
+import copy
+from math import sqrt, exp
+from scipy.special import erf
+import logging
+import time
+import argparse
+from multiprocessing import Pool
+import random
+from sklearn.metrics import f1_score
+
+root = '.'
+
+class RunningAverage():
+    def __init__(self):
+        self.steps = 0
+        self.total = 0
+
+    def update(self, val):
+        self.total += val
+        self.steps += 1
+
+    def __call__(self):
+        return self.total / float(self.steps)
+
+def log_creater(output_dir,expname):
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    log_name='{}.log'.format(expname)
+    #log_name = mode+'_{}.log'.format(time.strftime('%Y-%m-%d-%H-%M'))
+    final_log_file = os.path.join(output_dir,log_name)
+
+    # creat a log
+    log = logging.getLogger('train_log')
+    log.setLevel(logging.DEBUG)
+
+    # FileHandler
+    file = logging.FileHandler(final_log_file,'w')
+    file.setLevel(logging.DEBUG)
+
+    # StreamHandler
+    stream = logging.StreamHandler()
+    stream.setLevel(logging.DEBUG)
+
+    # Formatter
+    formatter = logging.Formatter(
+        '[%(asctime)s][line: %(lineno)d] ==> [INFO] %(message)s')
+
+    # setFormatter
+    file.setFormatter(formatter)
+    stream.setFormatter(formatter)
+
+    # addHandler
+    log.addHandler(file)
+    log.addHandler(stream)
+
+    log.info('creating {}'.format(final_log_file))
+    return log
+
+
+def save_checkpoint(model, is_best, checkpoint,log, epoch):
+    global mode
+    global expname
+
+    #model_name = os.path.join(checkpoint, 'mode_{}_'.format(mode)+'epoch_' + str(epoch) + '_model.pth.tar')
+    model_name=os.path.join(checkpoint, '{}'.format(expname) + '_modelbest.tar')
+
+    if not os.path.exists(checkpoint):
+        print("Checkpoint Directory does not exist! Making directory {}".format(checkpoint))
+        os.mkdir(checkpoint)
+
+    if is_best:
+        log.info("Saving checkpoint... ")
+        log.info("Saved to {}".format(model_name))
+        log.info("Checkpoint is best!")
+        with open(model_name, 'wb') as f:
+            torch.save(model.state_dict(), f)
+    else:
+        log.info("Model not good, skip!")
+
+class Model(nn.Module):
+    def __init__(self, input_size, output_size):
+        super(Model,self).__init__()
+
+        self.hidden1 = nn.Linear(input_size,2048) # 2048
+        self.hidden2 = nn.Linear(2048, 1024)  # hidden layer
+        self.hidden3 = nn.Linear(1024, 256)
+        self.hidden4 = nn.Linear(256, output_size)  # output layer
+
+    def forward(self, x):
+        x = F.relu(self.hidden1(x))  # activation function for hidden layer
+        x = F.relu(self.hidden2(x))
+        x = F.relu(self.hidden3(x))
+        x = self.hidden4(x)  # linear output
+        x = F.log_softmax(x,dim=1)
+        return x
+
+def cancerType(type):
+    global cancerTypes
+    idx=cancerTypes.index(type)
+    #out=np.zeros(len(cancerTypes))
+    #out[idx]=1
+    #return out
+    return idx
+
+class Clinical_Data(Dataset):
+    def __init__(self, index):
+        print("[INFO] Loading {}".format(os.path.join(root,"data/{}.npy".format(index))))
+        self.data = np.load(os.path.join(root,"data/{}.npy".format(index)),allow_pickle=True).item()
+        # self.samples dic
+        # 'TCGA-OR-A5J1-01A-11R-A29S-07':
+        self.samples = self.data['samples']
+        #print("samples:")
+        #print(self.samples)
+        # feature_dic : 'ABCA7|10347',etc
+        self.feature_dic = self.data['features']
+
+        print("[INFO] {} Data has {} samples".format(index, len(self.samples)))
+
+        # print("=> Preprocessing Data")
+        # for patient_id in tqdm(self.samples.keys()):
+        #     information = {
+        #         "id":       patient_id,
+        #         "genes":    [float(i) for i in self.samples[patient_id]["genes"]],
+        #         "day2birth":float(self.samples[patient_id]["day2birth"]),
+        #         "day2death": float(self.samples[patient_id]["day2death"]),
+        #         "dayrecord": float(self.samples[patient_id]["dayrecord"]),
+        #         "cancertype": self.samples[patient_id]["cancertype"]
+        #     }
+        #     self.data.append(information)
+
+    def __getitem__(self, idx):
+        #### get the values of the self.samples. Note: self.samples is a dictionary {sample name: {day2birth, day2death, day2record, cancertype, genes}}#############################
+        values_list=list(self.samples.values())
+        
+        #data_dic = copy.deepcopy(self.samples[idx])
+        data_dic = copy.deepcopy(values_list[idx])
+        
+        genes = data_dic['genes']
+        #label = data_dic['cancertype']
+        label=cancerType(data_dic['cancertype'])
+
+        #label = data_dic['day2death']
+
+        del data_dic['genes']
+        info = data_dic
+
+        # Genes: 20531 len Tensor
+        # lable: float value
+        # info:  dic info
+        
+        #return torch.Tensor(genes), label, info
+        return torch.Tensor(genes), label
+
+    def __len__(self):
+        # as we have built up to batchsz of sets, you can sample some small batch size of sets.
+        return len(self.samples)
+
+    def __alltypes__(self):
+        out=[]
+        #print("__alltypes_ get:")
+        #print(self.samples)
+        
+        #### get the values of the self.samples. Note: self.samples is a dictionary {sample name: {day2birth, day2death, day2record, cancertype, genes}}#############################
+        values_list=list(self.samples.values())
+        
+        for idx in range(len(self.samples)):
+            #print("idx is:")
+            #print(idx)
+            #print(values_list[idx])
+            out.append(values_list[idx]['cancertype'])
+        print("cacertype labels from inputted data:")
+        print(out)
+        return out
+
+def initialClientModel(serverModel,device):
+    global cancerTypes
+    clientModel=Model(input_size=20531,output_size=len(cancerTypes))
+    
+    ############ If device is 'cpu', no need move model to GPU. ##########################
+    ############ If device is GPU, we need move model from cpu to GPU  ###################
+    #clientModel=clientModel.to(device=device)
+    #clientModel = torch.nn.DataParallel(clientModel).cuda()
+    clientModel.load_state_dict(serverModel.state_dict())
+    return clientModel
+
+def compute_grad_update(old_model, new_model, lr, device):
+    # maybe later to implement on selected layers/parameters
+    if device:
+        old_model, new_model = old_model.to(device), new_model.to(device)
+    return [(new_param.data - old_param.data)/(-lr) for old_param, new_param in zip(old_model.parameters(), new_model.parameters())]
+
+def l2norm(grad):
+    return torch.sum(torch.pow(flatten(grad), 2))
+
+def add_gradient_updates(grad_update_1, grad_update_2, weight=1.0):
+    for param_1, param_2 in zip(grad_update_1, grad_update_2):
+        param_1.data += param_2.data * weight
+
+# def calibrateAnalyticGaussianMechanism(epsilon, delta, GS=1, tol=1.e-12):
+
+    # """ Calibrate a Gaussian perturbation for differential privacy using the analytic Gaussian mechanism of [Balle and Wang, ICML'18]
+        # Arguments:
+        # epsilon : target epsilon (epsilon > 0)
+        # delta : target delta (0 < delta < 1)
+        # GS : upper bound on L2 global sensitivity (GS >= 0). Global sensitivity quantifies the maximum difference in output between two neighboring datasets for a given query, regardless of the specific datasets. It's a crucial parameter for designing DP mechanisms because it determines the amount of noise needed to ensure privacy guarantees. 
+        # tol : error tolerance for binary search (tol > 0)
+        # Output:
+        # sigma : standard deviation of Gaussian noise needed to achieve (epsilon,delta)-DP under global sensitivity GS
+    # """
+
+    # def Phi(t):
+        # return 0.5 * (1.0 + erf(float(t) / sqrt(2.0)))
+
+    # def caseA(epsilon, s):
+        # return Phi(sqrt(epsilon * s)) - exp(epsilon) * Phi(-sqrt(epsilon * (s + 2.0)))
+
+    # def caseB(epsilon, s):
+        # return Phi(-sqrt(epsilon * s)) - exp(epsilon) * Phi(-sqrt(epsilon * (s + 2.0)))
+
+    # def doubling_trick(predicate_stop, s_inf, s_sup):
+        # while (not predicate_stop(s_sup)):
+            # s_inf = s_sup
+            # s_sup = 2.0 * s_inf
+        # return s_inf, s_sup
+
+    # def binary_search(predicate_stop, predicate_left, s_inf, s_sup):
+        # s_mid = s_inf + (s_sup - s_inf) / 2.0
+        # while (not predicate_stop(s_mid)):
+            # if (predicate_left(s_mid)):
+                # s_sup = s_mid
+            # else:
+                # s_inf = s_mid
+            # s_mid = s_inf + (s_sup - s_inf) / 2.0
+        # return s_mid
+
+    # delta_thr = caseA(epsilon, 0.0)
+
+    # if (delta == delta_thr):
+        # alpha = 1.0
+
+    # else:
+        # if (delta > delta_thr):
+            # predicate_stop_DT = lambda s: caseA(epsilon, s) >= delta
+            # function_s_to_delta = lambda s: caseA(epsilon, s)
+            # predicate_left_BS = lambda s: function_s_to_delta(s) > delta
+            # function_s_to_alpha = lambda s: sqrt(1.0 + s / 2.0) - sqrt(s / 2.0)
+
+        # else:
+            # predicate_stop_DT = lambda s: caseB(epsilon, s) <= delta
+            # function_s_to_delta = lambda s: caseB(epsilon, s)
+            # predicate_left_BS = lambda s: function_s_to_delta(s) < delta
+            # function_s_to_alpha = lambda s: sqrt(1.0 + s / 2.0) + sqrt(s / 2.0)
+
+        # predicate_stop_BS = lambda s: abs(function_s_to_delta(s) - delta) <= tol
+
+        # s_inf, s_sup = doubling_trick(predicate_stop_DT, 0.0, 1.0)
+        # s_final = binary_search(predicate_stop_BS, predicate_left_BS, s_inf, s_sup)
+        # alpha = function_s_to_alpha(s_final)
+
+    # sigma = alpha * GS / sqrt(2.0 * epsilon)
+    # return sigma
+
+
+
+def calibrateAnalyticGaussianMechanism(epsilon, delta, GS=1, tol=1.e-12):
+    ################## It is the alternative for the function calibrateAnalyticGaussianMechanism above #################
+    ################### It is standard Gaussian mechanism of [Geng et al. Optimal noise-adding mechanism in additive differential privacy]
+    """
+        Arguments:
+        epsilon : target epsilon (epsilon > 0)
+        delta : target delta (0 < delta < 1)
+        GS : upper bound on L2 global sensitivity (GS >= 0). Global sensitivity quantifies the maximum difference in output between two neighboring datasets for a given query, regardless of the specific datasets. It's a crucial parameter for designing DP mechanisms because it determines the amount of noise needed to ensure privacy guarantees. 
+        tol : error tolerance for binary search (tol > 0)
+        Output:
+        sigma : standard deviation of Gaussian noise needed to achieve (epsilon,delta)-DP under global sensitivity GS
+    """
+
+    sigma = GS*sqrt(2*np.log(2/delta)) / epsilon
+    return sigma
+
+
+
+def sign(grad):
+    return torch.sign(grad)
+
+def flatten(grad):
+    return grad.data.view(-1)
+
+def dpvalue(p):
+  return torch.tensor(1) if np.random.random() < p else torch.tensor(-1)
+
+def Phi(t):
+    return 0.5*(1.0 + erf(float(t)/sqrt(2.0)))
+
+def parallel_dpvalue(p):
+    return dpvalue(Phi(p))
+
+def run_parallel_dpvalue(ps):
+    global nprocess
+    with Pool(processes=nprocess) as pool:
+        processed_data=pool.map(parallel_dpvalue,ps)
+    return processed_data
+
+def dpsign(grad, device,epsilon=8, delta=1e-3):
+    global l2_norm_clip
+    sigma=calibrateAnalyticGaussianMechanism(epsilon=epsilon, delta=delta,GS=l2_norm_clip)
+    #print(grad)
+    grad=torch.tensor(grad).to(device)
+    grad_sigma=grad/torch.tensor([sigma]).to(device)
+    grad_phi=torch.tensor([0.5]).to(device)*(torch.tensor([1.0]).to(device) + torch.erf(grad_sigma/sqrt(torch.tensor([2.0]).to(device))))
+    random_matrix=torch.tensor(np.random.random(size=grad.shape),device=device)
+    bool_matrix=(grad_phi>random_matrix).type(torch.uint8)
+    bool_matrix[bool_matrix==0]=-1
+    result=bool_matrix
+    #result=torch.tensor([dpvalue(Phi(i/sigma)) for i in flatten(grad)],device=device).reshape(grad.shape)
+    #result = sign(torch.tensor(np.random.normal(0, sigma, grad.shape), device=device) + grad)
+    return result
+
+def dp(grad, device,epsilon=8, delta=1e-3):
+    global l2_norm_clip
+    sigma = calibrateAnalyticGaussianMechanism(epsilon=epsilon, delta=delta, GS=l2_norm_clip)
+    #sigma = 0.0001 #TODO
+    
+    #########(1) The original DP noise algorithm: the analytic Gaussian mechanism of [Balle and Wang, ICML'18]
+    #result = torch.tensor(np.random.normal(0, sigma, grad.shape), device=device) + grad
+    
+    ########################## (2) The second DP noise algorithm: Correlated Noise [Lebeda, Better gaussian mechanism using correlated noise, 2025]  #############################################
+    ##################### Use it to replace the analytic Gaussian mechanism of [Balle and Wang, ICML'18](def calibrateAnalyticGaussianMechanism) ##############
+    
+    #print("grad.shape: "+ str(grad.shape))    # grad.shape: torch.Size([2048, 20531]). 2048 is the neuron of the first layer of the DL model. 20531 is the number of features/genes.
+    #d = grad.shape[0]
+    d = 10000
+    #d = 1
+    zeta_sd = sigma*sqrt(d + sqrt(d))/2 
+    zeta = np.random.normal(0, zeta_sd, grad.shape)
+    
+    eta_sd = sigma*sqrt(1 + sqrt(d))/2 
+    eta_random_value = np.random.normal(0, eta_sd, 1)
+    eta = np.full(grad.shape, eta_random_value)
+    
+    result = torch.tensor(zeta + eta, device=device) + grad   
+     
+    #result = torch.tensor([torch.tensor(np.random.normal(0, sigma,len(flatten(grad))), device=device) + flatten(grad)], device=device).reshape(grad.shape)
+    return result
+
+def add_update_to_model(model, update, weight=1.0, device=None):
+    if not update: return model
+    if device:
+        model = model.to(device)
+        update = [param.to(device) for param in update]
+
+    for param_model, param_update in zip(model.parameters(), update):
+        param_model.data += weight * param_update.data
+    return model
+
+def updateServerModel(server_model, grad_updates, lr, device=None, mode='SGD',epsilon=8, delta=1e-3):
+    aggregated=[]
+    if mode == 'SIGNSGD':
+        for i in range(len(grad_updates)):
+            aggregated.append(sign(grad_updates[i]))
+    if mode=='DP' or mode == 'DPShuffling' or mode == 'PPMLOmics':
+        for i in range(len(grad_updates)):
+            aggregated.append(dp(grad_updates[i], device=device ,epsilon=epsilon, delta=delta))
+    if mode=='SGD':
+        aggregated=grad_updates
+
+    add_update_to_model(server_model, aggregated, weight=-1.0 * lr)
+    return server_model
+
+def make_optimizer_class(cls):
+    class DPOptimizerClass(cls):
+        def __init__(self, l2_norm_clip, **kwargs):
+            super(DPOptimizerClass, self).__init__(**kwargs)
+
+            self.l2_norm_clip = l2_norm_clip
+
+            for group in self.param_groups:
+                group['accum_grads'] = [torch.zeros_like(param.data) if param.requires_grad else None for param in group['params']]
+
+        def zero_grad(self):
+            for group in self.param_groups:
+                for accum_grad in group['accum_grads']:
+                    if accum_grad is not None:
+                        accum_grad.zero_()
+
+        def step(self, **kwargs):
+            total_norm = 0.
+            for group in self.param_groups:
+                for param in group['params']:
+                    if param.requires_grad:
+                        total_norm += param.grad.data.norm(2).item() ** 2.
+            total_norm = total_norm ** .5
+            clip_coef = min(self.l2_norm_clip / (total_norm + 1e-6), 1.)
+
+            for group in self.param_groups:
+                for param, accum_grad in zip(group['params'], group['accum_grads']):
+                    if param.requires_grad:
+                        accum_grad.add_(param.grad.data.mul(clip_coef))
+
+            for group in self.param_groups:
+                for param, accum_grad in zip(group['params'], group['accum_grads']):
+                    if param.requires_grad:
+                        param.grad.data = accum_grad.clone()
+                        # param.grad.data.add_(self.l2_norm_clip * self.noise_multiplier * torch.randn_like(param.grad.data))
+                        # param.grad.data.mul_(self.microbatch_size / self.minibatch_size)
+            super(DPOptimizerClass, self).step(**kwargs)
+
+    return DPOptimizerClass
+
+DPSGD = make_optimizer_class(torch.optim.SGD)
+
+def accuracy(preds, labels):
+    acc=(torch.tensor(preds).argmax(dim=1) == torch.tensor(labels).squeeze()).sum()/len(labels)
+    return acc
+
+def f1(preds, labels):
+    y_pred=torch.tensor(preds).argmax(dim=1)
+    y_true=torch.tensor(labels).squeeze()
+    macro_f1=f1_score(y_true, y_pred, average='macro')
+    micro_f1 = f1_score(y_true, y_pred, average='micro')
+    return macro_f1,micro_f1
+
+def DRSimulation(l):
+    for i in range(len(l)-1):
+        j = random.randint(i, len(l)-1) # Return a random integer N such that a <= N <= b.
+        l[i], l[j] = l[j], l[i]
+    return l
+
+def Train(logger,
+          trainLoaders,
+          testLoader,
+          serverModel,
+          criterions,
+          device,
+          num_epochs=25,
+          model_path="model",
+          mode='SGD'):
+
+    global lr
+    global epsilon
+    global delta
+    global numberClients
+    global l2_norm_clip
+    global shuffle_model
+
+    loss_avg = RunningAverage()
+
+    best_loss = 10 ** 15
+    best_acc = 0
+    is_best = False
+
+    #optimizer = torch.optim.Adam(serverModel.parameters(), lr=lr)
+
+    for epoch in range(num_epochs):
+
+        logger.info('Epoch {}/{}'.format(epoch+1, num_epochs))
+        labels = []
+        preds = []
+        #serverModel.train()               ########## ????????????????????????????
+
+        if True:
+
+            client_Model_list = []
+
+            for client_idx in range(numberClients):
+                logger.info('client id {}'.format(client_idx))
+                trainLoader = trainLoaders[client_idx]
+                #print("trainLoader:")
+                #print(trainLoader)
+                
+                
+                # initial clientModel
+                clientModel = initialClientModel(serverModel, device=device)
+                optimizer = torch.optim.SGD(clientModel.parameters(), lr=lr)
+                clientModel.train()
+                                
+                with tqdm(total=len(trainLoader)) as t:
+                    
+                    #### Note: trainLoader will automatically utilizes the __getitem__ method in class Clinical_Data(Dataset). Because trainLoader is a DataLoader. The DataLoader in Python, particularly in libraries like PyTorch, automatically utilizes the __getitem__ method to fetch data because it's fundamental to how Python handles iteration and indexing.
+                    #for genes, label, info in tqdm(trainLoader):
+                    for genes, label in tqdm(trainLoader):
+                        #print("genes, label:")
+                        #print(genes, label)
+                        genes, label = genes.to(device), label.to(device, dtype=torch.long)
+                        
+                        # serverModel.zero_grad()
+                        # pred = serverModel(genes)
+                        clientModel.zero_grad()
+                        pred = clientModel(genes)
+
+                        loss = criterions(pred, label)
+                        loss.backward()
+                        optimizer.step()
+                        loss_avg.update(loss.item())
+                        # statistics
+
+                        labels += list(label.detach().cpu().numpy())
+                        preds += list(pred.detach().cpu().numpy())
+
+                        t.set_postfix(
+                            loss_avg='{:05.3f}'.format(loss_avg()),
+                            total_loss='{:05.3f}'.format(loss.item()),
+                        )
+                        t.update()
+                        
+                client_Model_list.append(clientModel)
+                logger.info("Length of model list: {}".format(len(client_Model_list)))
+
+            # Shuffle the client_Model_list
+            if args.mode == 'DPShuffling':
+                logger.info("=> Shuffling the client model")
+                random.shuffle(client_Model_list)
+            elif args.mode == 'PPMLOmics':
+                logger.info("=> using the DR simulation")
+                client_Model_list = DRSimulation(client_Model_list)
+
+            aggregated_grads = []
+            for clientModel in client_Model_list:
+                grads = compute_grad_update(serverModel, clientModel, lr, device)
+                # update to serverModel
+                try:
+                    aggregated_grads=[aggregated_grads[i] + grads[i] for i in range(len(grads))]
+                except:
+                    print('** can not sum up, if this alarm continuously shows more than once, check!')
+                    aggregated_grads = grads
+            aggregated_grads = [x/args.client for x in aggregated_grads]
+
+            serverModel = updateServerModel(serverModel, aggregated_grads, mode=mode, lr=lr, device=device, epsilon=args.epsilon_l,delta=args.delta_l)
+
+        acc=accuracy(preds, labels)
+        macro_f1, micro_f1 = f1(preds, labels)
+        logger.info('Epoch Training loss: {}, acc: {}, macro_f1: {}, micro_f1: {}'.format(loss_avg(), acc,macro_f1,micro_f1))
+
+        serverModel.eval()
+        test_loss, test_acc = Test(logger,testLoader,serverModel,criterions,device)
+
+        if  test_acc > best_acc:
+            is_best = True
+            best_loss = test_loss
+            best_acc = test_acc
+        else:
+            is_best = False
+
+        save_checkpoint(serverModel, is_best, model_path, logger, epoch)
+
+    return serverModel
+
+
+def Test(logger,
+         test_loader,
+         model,
+         criterions,
+         device
+         ):
+    loss_avg = RunningAverage()
+
+    logger.info("Testing...")
+
+    labels = []
+    preds = []
+
+    with tqdm(total=len(test_loader)) as t:
+        #for genes, label, info in tqdm(test_loader):
+        for genes, label in tqdm(test_loader):
+            genes, label = genes.to(device), label.to(device)
+
+            pred = model(genes)
+            loss = criterions(pred, label)
+            loss_avg.update(loss.item())
+            # statistics
+
+            labels += list(label.detach().cpu().numpy())
+            preds += list(pred.detach().cpu().numpy())
+
+            t.set_postfix(loss_avg='{:05.3f}'.format(loss_avg()),
+                              )
+            t.update()
+
+    acc = accuracy(preds, labels)
+    macro_f1, micro_f1=f1(preds, labels)
+    logger.info('Test loss: {} Test, acc: {}, macro_f1: {}, micro_f1: {}'.format(loss_avg(),acc,macro_f1,micro_f1))
+    return loss_avg(), acc
+
+def getSurvivalDataset(numClients, train_index='train', test_index='test'):
+    
+    #print("what is got as train_index")
+    #print(train_index)
+    
+    global logger
+    
+    trainDataset = Clinical_Data(index=train_index)
+    testDataset = Clinical_Data(index=test_index)
+
+    train_counts={}
+    test_counts={}
+    for t in cancerTypes:
+        train_counts[t]=0
+        test_counts[t]=0
+
+    for t in trainDataset.__alltypes__():
+        train_counts[t]+=1
+    for t in testDataset.__alltypes__():
+        test_counts[t]+=1
+
+    logger.info('Train Counts: {}'.format(train_counts))
+    logger.info('Test Counts: {}'.format(test_counts))
+    
+    ##### np.int replaced by int ##############################
+    numItems = int(np.floor(len(trainDataset) / numClients))
+    print("numItems: "+ str(numItems))
+    print("len(trainDataset) in line 561:")
+    print(len(trainDataset))
+    trainDatasets=[]
+    
+    if numClients!=1:
+        #print("random_split(), the second parameter:")
+        #print(str([numItems for i in range(numClients)]+[len(trainDataset)-numItems*numClients]))
+        #print(str([numItems for i in range(numClients)]))
+        #print(str([len(trainDataset)-numItems*numClients]))
+        ############## debug
+        list_x = [numItems for i in range(numClients)]
+        if len(trainDataset)-numItems*numClients !=0:
+            list_x[-1]=list_x[-1]+(len(trainDataset)-numItems*numClients)
+         
+        #for dataset in torch.utils.data.random_split(trainDataset, [numItems for i in range(numClients)]+[len(trainDataset)-numItems*numClients]):
+        for dataset in torch.utils.data.random_split(trainDataset, list_x):
+            print("length of dataset in line 590: "+ str(len(dataset)))
+            trainDatasets.append(dataset)
+    else:
+        trainDatasets.append(trainDataset)
+
+    return trainDatasets, testDataset
+
+if __name__ == '__main__':
+
+    # python FLDP_CC_simulation_App_H3_R1_D0.py --mode DP --client 5 --epsilon 5 --expname DP_data0_e5 --train_data train_0 --test_data test_0
+    start = time.time()
+    parser = argparse.ArgumentParser(description='dfsa')
+    parser.add_argument('--device', default='cuda:0', help='default: cuda:0. Other options: cpu, mps,xpu,etc')
+    parser.add_argument('--epochs', type=int, default=10, help='default: 10')
+    parser.add_argument('--batch_size', type=int, default=8, help='default: 1')
+    parser.add_argument('--lr', type=float, default=0.001, help='default: 0.01')
+    parser.add_argument('--epsilon', type=float, default=20, help='default: 1')
+    parser.add_argument('--delta', type=float, default=0.1, help='default: 10e-5')
+    parser.add_argument('--mode', default='SGD', help='default: SGD, DP, DPShuffling, PPMLOmics')
+    parser.add_argument('--client', type=int, default=20, help='default: 3')
+    parser.add_argument('--l2_clip', type=int, default=5, help='default: 5')
+    parser.add_argument('--nprocess', type=int, default=100, help='default: 20')
+    parser.add_argument('--expname', help='experiment name')
+    parser.add_argument('--train_data', default='train', help='will load data/{}.npy')
+    parser.add_argument('--test_data', default='test', help='will load data/{}.npy')
+    parser.add_argument('--shuffle_model', type=int, default=0, help='0: off, 1: on')
+    args = parser.parse_args()
+
+    device_name = args.device
+    EPOCHS = args.epochs
+    BATCH_SIZE = args.batch_size
+    lr = args.lr
+    epsilon = args.epsilon
+    delta = args.delta
+    mode = args.mode
+    numberClients = args.client
+    model_path = 'model'
+    l2_norm_clip = args.l2_clip
+    expname = args.expname
+    train_index=args.train_data
+    test_index=args.test_data
+    nprocess=args.nprocess
+    if args.mode=='DPShuffling':
+        shuffle_model=True
+
+    if args.mode == 'DP' or args.mode == 'SGD':
+        args.epsilon_l = args.epsilon/(2*np.sqrt(2*args.epochs*np.log(2/args.delta)))
+        args.delta_l = args.delta/(2*args.epochs)
+    elif args.mode == 'DPShuffling' or args.mode == 'PPMLOmics':
+        args.epsilon_c = args.epsilon / (2 * np.sqrt(2 * args.epochs * np.log(2 / args.delta)))
+        args.delta_c = args.delta / (2 * args.epochs)
+        args.epsilon_l = args.epsilon_c * np.sqrt(args.client) / (np.sqrt(np.log(2/args.delta_c)))
+        args.delta_l = args.delta_c/args.client
+
+    if 'cuda' in device_name:
+        os.environ['CUDA_VISIBLE_DEVICES'] = device_name.split(':')[1]
+        device_name = 'cuda:0'
+
+    cancerTypes = ['ACC', 'BLCA', 'BRCA', 'CESC', 'CHOL', 'COAD', 'COADREAD', 'DLBC', 'ESCA', 'GBM', 'GBMLGG', 'HNSC',
+                   'KICH', 'KIPAN', 'KIRC', 'KIRP', 'LAML', 'LGG', 'LIHC', 'LUAD', 'LUSC', 'MESO', 'OV', 'PAAD', 'PCPG',
+                   'PRAD', 'READ', 'SARC', 'SKCM', 'STAD', 'STES', 'TGCT', 'THCA', 'THYM', 'UCEC', 'UCS', 'UVM']
+
+    logger = log_creater(output_dir='log', expname=expname)
+    logger.info("Mode: {}".format(mode))
+    logger.info("clients: {}".format(args.client))
+    logger.info("Epochs: {}".format(EPOCHS))
+    logger.info("lr: {}".format(lr))
+    logger.info("batch size: {}".format(BATCH_SIZE))
+    if args.mode != 'SGD':
+        logger.info("end2end epsilon: {}".format(epsilon))
+        logger.info("end2end delta: {}".format(delta))
+        logger.info("client epsilon: {}".format(args.epsilon_l))
+        logger.info("client delta: {}".format(args.delta_l))
+        logger.info("sigma: {}".format(calibrateAnalyticGaussianMechanism(args.epsilon_l, args.delta_l, GS=args.l2_clip, tol=1.e-12)))
+
+    device = torch.device(device_name)
+
+    trainDatasets, testDataset = getSurvivalDataset(numberClients,train_index=train_index, test_index=test_index)
+    print("trainDatasets:")
+    print(trainDatasets)
+    #print("trainDatasets[0] and [1] length:")
+    #print(len(trainDatasets[0]),len(trainDatasets[1]))
+    
+    ########### ?????????????????????????????????????????????????????????????????????????????????????????
+    for dataset in trainDatasets:
+        print("in trainDatasets,dataset[0]:")
+        #print(dataset[0])
+        print("length:"+str(len(dataset)))
+    trainLoaders=[DataLoader(dataset, BATCH_SIZE, True) for dataset in trainDatasets]
+    testLoader = DataLoader(testDataset, BATCH_SIZE, False)
+
+    # Loss Function
+    criterion = nn.CrossEntropyLoss()
+
+    # Model
+    serverModel = Model(input_size=20531,output_size=len(cancerTypes))
+    
+    ############ If device is 'cpu', no need move model to GPU. ##########################
+    ############ If device is GPU, we need move model from cpu to GPU  ###################
+    #serverModel = serverModel.to(device)
+    #serverModel = torch.nn.DataParallel(serverModel).cuda()
+
+    # start train
+    trained_model = Train(logger,
+                        trainLoaders,
+                        testLoader,
+                        serverModel,
+                        criterions=criterion,
+                        device=device,
+                        num_epochs=EPOCHS,
+                        model_path=model_path,
+                        mode=mode)
+
+    Test(logger,
+         testLoader,
+         model=trained_model,
+         criterions=criterion,
+         device=device)
+
+    stop = time.time()
+    logger.info(f"The time of the run: {stop - start}")

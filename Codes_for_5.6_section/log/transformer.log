@@ -1,0 +1,19 @@
+[2025-08-18 14:27:31,336][line: 163] ==> [INFO] creating log/transformer.log
+[2025-08-18 14:27:33,153][line: 248] ==> [INFO] Train Counts: {'ACC': 14, 'BLCA': 84, 'BRCA': 239, 'CESC': 58, 'CHOL': 12, 'COAD': 84, 'COADREAD': 69, 'DLBC': 8, 'ESCA': 46, 'GBM': 40, 'GBMLGG': 131, 'HNSC': 124, 'KICH': 18, 'KIPAN': 204, 'KIRC': 116, 'KIRP': 56, 'LAML': 33, 'LGG': 109, 'LIHC': 79, 'LUAD': 125, 'LUSC': 108, 'MESO': 17, 'OV': 62, 'PAAD': 39, 'PCPG': 31, 'PRAD': 99, 'READ': 16, 'SARC': 62, 'SKCM': 78, 'STAD': 99, 'STES': 116, 'TGCT': 33, 'THCA': 111, 'THYM': 28, 'UCEC': 36, 'UCS': 10, 'UVM': 18}
+[2025-08-18 14:27:33,153][line: 249] ==> [INFO] Test Counts: {'ACC': 14, 'BLCA': 84, 'BRCA': 239, 'CESC': 58, 'CHOL': 12, 'COAD': 84, 'COADREAD': 69, 'DLBC': 8, 'ESCA': 46, 'GBM': 40, 'GBMLGG': 131, 'HNSC': 124, 'KICH': 18, 'KIPAN': 204, 'KIRC': 116, 'KIRP': 56, 'LAML': 33, 'LGG': 109, 'LIHC': 79, 'LUAD': 125, 'LUSC': 108, 'MESO': 17, 'OV': 62, 'PAAD': 39, 'PCPG': 31, 'PRAD': 99, 'READ': 16, 'SARC': 62, 'SKCM': 78, 'STAD': 99, 'STES': 116, 'TGCT': 33, 'THCA': 111, 'THYM': 28, 'UCEC': 36, 'UCS': 10, 'UVM': 18}
+[2025-08-18 14:27:37,294][line: 462] ==> [INFO] Epoch 1/1
+[2025-08-18 14:27:37,294][line: 472] ==> [INFO] client id 0
+[2025-08-18 17:52:54,372][line: 516] ==> [INFO] Length of model list: 1
+[2025-08-18 17:52:54,487][line: 472] ==> [INFO] client id 1
+[2025-08-18 21:15:17,269][line: 516] ==> [INFO] Length of model list: 2
+[2025-08-18 21:15:17,383][line: 472] ==> [INFO] client id 2
+[2025-08-19 00:44:07,522][line: 516] ==> [INFO] Length of model list: 3
+[2025-08-19 00:44:10,786][line: 533] ==> [INFO] Epoch Training loss: 3.773859911373267, acc: 0.07120980322360992, macro_f1: 0.030864853376925253, micro_f1: 0.07120980091883614
+[2025-08-19 00:44:10,786][line: 409] ==> [INFO] Testing...
+[2025-08-19 03:20:26,156][line: 432] ==> [INFO] Test loss: 3.293716341712788 Test, acc: 0.12327717989683151, macro_f1: 0.028473464713667452, micro_f1: 0.12327718223583461
+[2025-08-19 03:20:30,314][line: 551] ==> [INFO] Saving checkpoint... 
+[2025-08-19 03:20:30,314][line: 552] ==> [INFO] Saved to model/transformer_epoch_0_modelbest.tar
+[2025-08-19 03:20:30,315][line: 553] ==> [INFO] Checkpoint is best!
+[2025-08-19 03:20:31,320][line: 409] ==> [INFO] Testing...
+[2025-08-19 05:56:32,084][line: 432] ==> [INFO] Test loss: 3.293716341712788 Test, acc: 0.12327717989683151, macro_f1: 0.028473464713667452, micro_f1: 0.12327718223583461
+[2025-08-19 05:56:36,116][line: 606] ==> [INFO] The time of the run: 55744.77920174599
